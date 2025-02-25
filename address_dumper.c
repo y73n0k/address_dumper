@@ -1,31 +1,4 @@
-#include <errno.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/ptrace.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <sys/user.h>
-#include <sys/wait.h>
-
-#ifdef IS32
-#include <asm/unistd_32.h>
-#endif
-
-#ifndef WORDLEN
-#define WORDLEN 4
-#endif
-
-#ifndef SUBSTR
-#define SUBSTR "libc.so"
-#endif
-
-#ifndef SKIPS
-#define SKIPS 1
-#endif
-
+#include "address_dumper.h"
 
 typedef union
 {
@@ -69,12 +42,7 @@ void step(pid_t pid, int *wait_status){
 }
 
 
-int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        printf("Please provide program to exec and its args\n");
-        return 0;
-    }
-
+int dumper(char *argv[], const char *SUBSTR, unsigned long long SKIPS, void (*callback)(char *, unsigned long long)) {
     pid_t pid = fork();
 
     if (pid < 0) {
@@ -97,6 +65,7 @@ int main(int argc, char *argv[]) {
         struct user_regs_struct state;
         long fd;
         char found = 0;
+        char *path = NULL;
 
         waitpid(pid, &wait_status, 0);
 
@@ -119,24 +88,22 @@ int main(int argc, char *argv[]) {
                 // searching for openat syscall with path which contains SUBSTR
                 #ifdef IS32
                 if (state.orig_rax == __NR_openat) {
-                    char *path = string_dumper(pid, state.rcx);
+                    path = string_dumper(pid, state.rcx);
                 #else
                 if (state.orig_rax == SYS_openat) {
-                    char *path = string_dumper(pid, state.rsi);
+                    path = string_dumper(pid, state.rsi);
                 #endif
 
                     // printf("PATH: %s\n", path);
 
                     if (strstr(path, SUBSTR) != NULL) {
                         found = 1;
-                        printf("FOUND: %s\n", path);
                         step(pid, &wait_status);
                         ptrace(PTRACE_GETREGS, pid, 0, &state);
                         fd = state.rax;  // openat returns fd, so save it to find mmap syscall with this fd
                     } else {
                         step(pid, &wait_status);
                     }
-                    free(path);
                 }
             } else {
                 // find first mmap(NULL,...,...,...,fd,...) after opening path
@@ -153,7 +120,8 @@ int main(int argc, char *argv[]) {
                     #endif
                         step(pid, &wait_status);
                         ptrace(PTRACE_GETREGS, pid, 0, &state);
-                        printf("AT: %llx\n", state.rax);  // mmap returns base of library
+                        callback(path, state.rax); // mmap returns base of library
+                        free(path);
                         break;
                     }
                 }

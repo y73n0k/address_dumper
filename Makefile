@@ -1,10 +1,8 @@
 CC = gcc
 
 WORDLEN ?= 4
-SUBSTR ?= \"libc.so\"
-SKIPS ?= 1
 
-SRC = address_dumper.c disable_aslr.c test.c
+SRC = main.c address_dumper.c disable_aslr.c test.c
 
 EXE1 = address_dumper
 EXE2 = disable_aslr
@@ -12,11 +10,11 @@ EXE3 = test
 
 all: $(EXE1) $(EXE2) $(EXE3)
 
-$(EXE1): address_dumper.c
+$(EXE1): main.c
 ifdef IS32
-	$(CC) $< -o $@ -DWORDLEN=$(WORDLEN) -DSUBSTR=$(SUBSTR) -DSKIPS=$(SKIPS) -DIS32
+	$(CC) $< address_dumper.c -o $@ -DWORDLEN=$(WORDLEN) -DIS32
 else
-	$(CC) $< -o $@ -DWORDLEN=$(WORDLEN) -DSUBSTR=$(SUBSTR) -DSKIPS=$(SKIPS)
+	$(CC) $< address_dumper.c -o $@ -DWORDLEN=$(WORDLEN)
 endif
 
 $(EXE2): disable_aslr.c
